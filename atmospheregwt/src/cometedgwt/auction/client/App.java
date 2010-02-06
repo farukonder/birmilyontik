@@ -73,6 +73,11 @@ import cometedgwt.auction.entity.AuctionItem;
  * Entry point classes define <code>onModuleLoad()</code>.
  */
 public class App implements EntryPoint {
+	
+	private final String streamingServlet = GWT.getModuleBaseURL() + "streamingServlet";
+	private final String streamingService = GWT.getModuleBaseURL() + "streamingService";
+	
+	
 
 	public static final String TOPIC = "bids";
 	private Map mapOfItemPrices = new HashMap();
@@ -81,8 +86,7 @@ public class App implements EntryPoint {
 	private int watchDogTimerTime = 100000;
 	Map callbacks = new HashMap();
 	private boolean keepAlive = false;
-	private final String streamingServicePath = GWT.getModuleBaseURL() + "streamingServlet";
-	private final StreamingServiceInternalGWTAsync service = (StreamingServiceInternalGWTAsync) GWT.create(StreamingServiceInternalGWT.class);
+	private final StreamingServiceAsync service = (StreamingServiceAsync) GWT.create(StreamingService.class);
 	private final Map waitingSubscriber = new HashMap();
 	private final static AsyncCallback voidCallback = new AsyncCallback() {
 
@@ -190,14 +194,13 @@ public class App implements EntryPoint {
 	 * @param thisInstance
 	 *            : a trick, because I was unable to use this !!!
 	 */
-	private native void setUpNativeCode() /*-{
+	private native void setUpNativeCode(App app) /*-{
 		$wnd.callback = function(topicName, data)
 		{
-		this.@cometedgwt.auction.client.App::callback(Ljava/lang/String;Ljava/lang/String;)(topicName,data);
+		app.@cometedgwt.auction.client.App::callback(Ljava/lang/String;Ljava/lang/String;)(topicName,data);
 		}
 	}-*/;
 
-	// thisInstance.@org.gwtcomet.client.StreamingServiceGWTClientImpl::callback(Ljava/lang/String;Ljava/lang/String;)(topicName,data);
 	/**
 	 * A Timer that every 20s check if everything is working.
 	 * 
@@ -238,7 +241,7 @@ public class App implements EntryPoint {
 
 		DOM.appendChild(RootPanel.getBodyElement(), iframe);
 
-		DOM.setAttribute(iframe, "src", streamingServicePath);
+		DOM.setAttribute(iframe, "src", streamingServlet);
 	}
 
 	/*
@@ -396,10 +399,10 @@ public class App implements EntryPoint {
 
 		callbacks.put("keepAliveInternal", internalKeepAliveCallback);
 		callbacks.put("restartStreamingInternal", restartStreamingCallback);
+		
+		((ServiceDefTarget) service).setServiceEntryPoint(streamingService);
 
-		((ServiceDefTarget) service).setServiceEntryPoint(GWT.getModuleBaseURL() + "streamingService");
-
-		setUpNativeCode();
+		setUpNativeCode(this);
 
 		restartStreamingFromIFrame();
 

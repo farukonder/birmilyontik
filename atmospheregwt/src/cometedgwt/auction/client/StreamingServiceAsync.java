@@ -39,7 +39,7 @@ package cometedgwt.auction.client;
 
 import com.google.gwt.user.client.rpc.AsyncCallback;
 
-public interface StreamingServiceInternalGWTAsync {
+public interface StreamingServiceAsync {
 
     void sendMessage(String topicName, String message, AsyncCallback callback);
 
