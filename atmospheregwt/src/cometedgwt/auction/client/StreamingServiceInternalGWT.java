@@ -39,7 +39,7 @@ package cometedgwt.auction.client;
 
 import com.google.gwt.user.client.rpc.RemoteService;
 
-public interface StreamingServiceInternalGWT extends StreamingServiceInternal, RemoteService {
+public interface StreamingServiceInternalGWT extends RemoteService {
     // TODO: GWT miss method implemented by implemented interfaces like StreamingServiceGWTClientImpl !!!!!
 
     void sendMessage(String topicName, String message);

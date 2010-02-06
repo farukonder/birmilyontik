@@ -39,21 +39,32 @@ package cometedgwt.auction.client;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import com.google.gwt.core.client.EntryPoint;
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.json.client.JSONArray;
+import com.google.gwt.json.client.JSONException;
 import com.google.gwt.json.client.JSONNumber;
 import com.google.gwt.json.client.JSONObject;
+import com.google.gwt.json.client.JSONParser;
+import com.google.gwt.json.client.JSONValue;
+import com.google.gwt.user.client.DOM;
+import com.google.gwt.user.client.Element;
+import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.rpc.AsyncCallback;
+import com.google.gwt.user.client.rpc.ServiceDefTarget;
 import com.google.gwt.user.client.ui.Button;
 import com.google.gwt.user.client.ui.ClickListener;
 import com.google.gwt.user.client.ui.Grid;
 import com.google.gwt.user.client.ui.KeyboardListener;
 import com.google.gwt.user.client.ui.Label;
 import com.google.gwt.user.client.ui.RootPanel;
+import com.google.gwt.user.client.ui.TextArea;
 import com.google.gwt.user.client.ui.TextBox;
 import com.google.gwt.user.client.ui.Widget;
 import cometedgwt.auction.entity.AuctionItem;
@@ -64,9 +75,234 @@ import cometedgwt.auction.entity.AuctionItem;
 public class App implements EntryPoint {
 
 	public static final String TOPIC = "bids";
-	private StreamingService streamingService;
 	private Map mapOfItemPrices = new HashMap();
 	private Map mapOfNumberOfBids = new HashMap();
+
+	private int watchDogTimerTime = 100000;
+	Map callbacks = new HashMap();
+	private boolean keepAlive = false;
+	private final String streamingServicePath = GWT.getModuleBaseURL() + "streamingServlet";
+	private final StreamingServiceInternalGWTAsync service = (StreamingServiceInternalGWTAsync) GWT.create(StreamingServiceInternalGWT.class);
+	private final Map waitingSubscriber = new HashMap();
+	private final static AsyncCallback voidCallback = new AsyncCallback() {
+
+		public void onFailure(Throwable caught) {
+		}
+
+		public void onSuccess(Object result) {
+		}
+	};
+	private final AsyncCallback restartStreamingCallback = new AsyncCallback() {
+
+		public void onFailure(Throwable caught) {
+		}
+
+		public void onSuccess(Object result) {
+			restartStreamingFromIFrame();
+			callback("restartStreaming", (String) result);
+		}
+	};
+	/**
+	 * Receive hearthbeats from the streaming server. It sets keepAlive flag to
+	 * true to prevent the Timer to restart the streaming and then call the
+	 * client callback (maybe the client has to do something with the heartbeat
+	 * itself).
+	 */
+	private final AsyncCallback internalKeepAliveCallback = new AsyncCallback() {
+
+		public void onFailure(Throwable caught) {
+		}
+
+		public void onSuccess(Object result) {
+
+			alert("keepAlive");
+			keepAlive = true;
+			watchDogTimerTime = 10 * Integer.parseInt(result.toString());
+
+			for (Iterator iter = waitingSubscriber.entrySet().iterator(); iter.hasNext();) {
+				Entry callback = (Entry) iter.next();
+
+				/*
+				 * Take care, the Map implementation can be different from his
+				 * Java counterpart. I think it uses object identity instead of
+				 * object equality, so for instance two equals String done in
+				 * different way can lend to two different keys in the map. Try
+				 * this
+				 * 
+				 * void testMap(Object key, Object value) { Map test = new
+				 * HashMap(); test.put(key.toString(),value);
+				 * 
+				 * if(!test.containsKey("testKey")) {
+				 * GWT.log("bug in map found !!!",null); } }
+				 * 
+				 * If called this way:
+				 * 
+				 * testMap("testKey", new Object());
+				 * 
+				 * that code will print the warning row !!!!! Should be fixed.
+				 */
+				subScribeToEvent((String) callback.getKey(), (AsyncCallback) callback.getValue());
+
+				iter.remove();
+			}
+
+			callback("keepAlive", "");
+		}
+	};
+
+	/**
+	 * If we have a callback for the "event" (and we should if we subscribed)
+	 * then let's call it.
+	 * 
+	 * @param event
+	 *            : contains the event we subscribed
+	 * @param data
+	 *            : datas that come from the server
+	 */
+	private void callback(String topicName, String data) {
+		keepAlive = true;
+
+		alert("received callback for (" + topicName + "," + data + ")");
+
+		if (callbacks.containsKey(topicName)) {
+			AsyncCallback callback = (AsyncCallback) callbacks.get(topicName);
+
+			try {
+				Object dataToSend = data;
+
+				if (data.startsWith("$JSONSTART$") && data.endsWith("$JSONEND$")) {
+					dataToSend = JSONParser.parse(data.substring("$JSONSTART$".length(), data.length() - "$JSONEND$".length()));
+				}
+
+				callback.onSuccess(dataToSend);
+			} catch (JSONException e) {
+				callback.onFailure(e);
+			}
+		} else {
+			alert("received event for a not subscribed topic: '" + topicName + "'");
+			alert("current topics are: " + callbacks.keySet());
+		}
+	}
+
+	/**
+	 * Setup the two Javascript method used for the callback from the server
+	 * 
+	 * @param thisInstance
+	 *            : a trick, because I was unable to use this !!!
+	 */
+	private native void setUpNativeCode() /*-{
+		$wnd.callback = function(topicName, data)
+		{
+		this.@cometedgwt.auction.client.App::callback(Ljava/lang/String;Ljava/lang/String;)(topicName,data);
+		}
+	}-*/;
+
+	// thisInstance.@org.gwtcomet.client.StreamingServiceGWTClientImpl::callback(Ljava/lang/String;Ljava/lang/String;)(topicName,data);
+	/**
+	 * A Timer that every 20s check if everything is working.
+	 * 
+	 */
+	private void createWatchDogTimer() {
+		Timer t = new Timer() {
+
+			public void run() {
+				if (!keepAlive) {
+					alert("the dog is angry !!! Awake streaming !!!");
+					restartStreamingFromIFrame();
+				}
+
+				keepAlive = false;
+			}
+		};
+		t.scheduleRepeating(watchDogTimerTime);
+	}
+
+	/**
+	 * Uses DOM to create, if necessary, the iframe, then sets the src attribute
+	 * to start the streaming. It's important to clear the "old" iframe when
+	 * restarting, or spurios Javascript can send old event to the callback
+	 * method
+	 */
+	private void restartStreamingFromIFrame() {
+		Element iframe = DOM.getElementById("__gwt_streamingFrame");
+
+		if (iframe != null) {
+			DOM.removeChild(RootPanel.getBodyElement(), iframe);
+		}
+
+		iframe = DOM.createIFrame();
+		DOM.setAttribute(iframe, "id", "__gwt_streamingFrame");
+		DOM.setStyleAttribute(iframe, "width", "0");
+		DOM.setStyleAttribute(iframe, "height", "0");
+		DOM.setStyleAttribute(iframe, "border", "0");
+
+		DOM.appendChild(RootPanel.getBodyElement(), iframe);
+
+		DOM.setAttribute(iframe, "src", streamingServicePath);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.gwtcomet.client.StreamingService#sendMessage(java.lang.String,
+	 * java.lang.String)
+	 */
+	public void sendMessage(String topicName, String data) {
+		service.sendMessage(topicName, data, voidCallback);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see org.gwtcomet.client.StreamingService#sendMessage(java.lang.String,
+	 * com.google.gwt.sample.json.client.JSONValue)
+	 */
+	public void sendMessage(String topicName, JSONValue object) {
+		sendMessage(topicName, "$JSONSTART$" + object.toString() + "$JSONEND$");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see
+	 * org.gwtcomet.client.StreamingService#subScribeToEvent(java.lang.String,
+	 * com.google.gwt.user.client.rpc.AsyncCallback)
+	 */
+	public void subScribeToEvent(String topicName, AsyncCallback callback) {
+		if (keepAlive) {
+			alert("Streaming is alive, subscribing to '" + topicName + "' with callback " + callback);
+			service.subscribeToTopic(topicName, voidCallback);
+			callbacks.put(topicName, callback);
+
+			alert(callbacks.toString());
+		} else {
+			alert("Streaming is not alive, subscriber '" + topicName + "' is cached with callback " + callback + " until online");
+
+			waitingSubscriber.put(topicName, callback);
+		}
+	}
+
+	private final TextArea textArea = new TextArea();
+
+	private void alert(String message) {
+		if (GWT.isScript()) {
+			RootPanel debugDiv = RootPanel.get("debug");
+			if (debugDiv != null) {
+				// if(debugDiv.getWidgetIndex(textArea)==-1)
+				// {
+				// textArea.setVisibleLines(30);
+				// textArea.setWidth("100%");
+				// textArea.setText("");
+				// debugDiv.add(textArea);
+				// }
+				//				
+				// textArea.setText(textArea.getText()+"\n"+new
+				// Date()+"("+System.currentTimeMillis()+"):"+message);
+			}
+		} else {
+			GWT.log(message, null);
+		}
+	}
 
 	//
 	// Ajax Push happens here!
@@ -158,8 +394,18 @@ public class App implements EntryPoint {
 
 		RootPanel.get("slot1").add(table);
 
-		streamingService = StreamingServiceGWTClientImpl.getInstance();
-		streamingService.subScribeToEvent(TOPIC, new BidCallback());
+		callbacks.put("keepAliveInternal", internalKeepAliveCallback);
+		callbacks.put("restartStreamingInternal", restartStreamingCallback);
+
+		((ServiceDefTarget) service).setServiceEntryPoint(GWT.getModuleBaseURL() + "streamingService");
+
+		setUpNativeCode();
+
+		restartStreamingFromIFrame();
+
+		createWatchDogTimer();
+
+		subScribeToEvent(TOPIC, new BidCallback());
 
 	}
 
@@ -212,7 +458,7 @@ public class App implements EntryPoint {
 		JSONObject container = new JSONObject();
 		container.put("value", array);
 
-		streamingService.sendMessage(TOPIC, container);
+		sendMessage(TOPIC, container);
 		myBid.setText("");
 		myBid.setFocus(true);
 	}
