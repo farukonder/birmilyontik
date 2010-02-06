@@ -41,9 +41,9 @@ import org.atmosphere.util.BroadcasterLookup;
 import org.atmosphere.util.gae.GAEDefaultBroadcaster;
 
 import com.google.gwt.user.server.rpc.RemoteServiceServlet;
-import cometedgwt.auction.client.StreamingServiceInternalGWT;
+import cometedgwt.auction.client.StreamingService;
 
-public class StreamingServiceImpl extends RemoteServiceServlet implements StreamingServiceInternalGWT {
+public class StreamingServiceImpl extends RemoteServiceServlet implements StreamingService {
 
 	private static final long serialVersionUID = 1L;
 
