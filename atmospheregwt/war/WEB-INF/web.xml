@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE web-app
+    PUBLIC "-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN"
+    "http://java.sun.com/dtd/web-app_2_3.dtd">
+
+<web-app>
+
+	<description>Atmosphere GWT Auction</description>
+	<display-name>Atmosphere Auction</display-name>
+	<servlet>
+		<description>AtmosphereServlet</description>
+		<servlet-name>AtmosphereServlet</servlet-name>
+		<servlet-class>org.atmosphere.cpr.AtmosphereServlet</servlet-class>
+		<!--
+			Uncomment if you want to use Servlet 2.5 Async Support
+			<async-supported>true</async-supported>
+		-->
+		<load-on-startup>0</load-on-startup>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>AtmosphereServlet</servlet-name>
+		<url-pattern>/streamingServlet</url-pattern>
+	</servlet-mapping>
+	<servlet-mapping>
+		<servlet-name>AtmosphereServlet</servlet-name>
+		<url-pattern>/streamingService</url-pattern>
+	</servlet-mapping>
+
+
+	<servlet>
+		<servlet-name>streamingServiceImpl</servlet-name>
+		<servlet-class>cometedgwt.auction.server.StreamingServiceImpl</servlet-class>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>streamingServiceImpl</servlet-name>
+		<url-pattern>/cometedgwt.auction.App/streamingService</url-pattern>
+	</servlet-mapping>
+	<servlet>
+		<servlet-name>streamingServlet</servlet-name>
+		<servlet-class>cometedgwt.auction.server.StreamingServlet</servlet-class>
+	</servlet>
+	<servlet-mapping>
+		<servlet-name>streamingServlet</servlet-name>
+		<url-pattern>/cometedgwt.auction.App/streamingServlet</url-pattern>
+	</servlet-mapping>
+
+
+</web-app>
