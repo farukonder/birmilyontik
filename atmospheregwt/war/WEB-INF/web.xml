@@ -8,7 +8,6 @@
 	<description>Atmosphere GWT Auction</description>
 	<display-name>Atmosphere Auction</display-name>
 	<servlet>
-		<description>AtmosphereServlet</description>
 		<servlet-name>AtmosphereServlet</servlet-name>
 		<servlet-class>org.atmosphere.cpr.AtmosphereServlet</servlet-class>
 		<!--
@@ -19,29 +18,11 @@
 	</servlet>
 	<servlet-mapping>
 		<servlet-name>AtmosphereServlet</servlet-name>
-		<url-pattern>/streamingServlet</url-pattern>
+		<url-pattern>/appcometgwt/streamingServlet</url-pattern>
 	</servlet-mapping>
 	<servlet-mapping>
 		<servlet-name>AtmosphereServlet</servlet-name>
-		<url-pattern>/streamingService</url-pattern>
-	</servlet-mapping>
-
-
-	<servlet>
-		<servlet-name>streamingServiceImpl</servlet-name>
-		<servlet-class>cometedgwt.auction.server.StreamingServiceImpl</servlet-class>
-	</servlet>
-	<servlet-mapping>
-		<servlet-name>streamingServiceImpl</servlet-name>
-		<url-pattern>/cometedgwt.auction.App/streamingService</url-pattern>
-	</servlet-mapping>
-	<servlet>
-		<servlet-name>streamingServlet</servlet-name>
-		<servlet-class>cometedgwt.auction.server.StreamingServlet</servlet-class>
-	</servlet>
-	<servlet-mapping>
-		<servlet-name>streamingServlet</servlet-name>
-		<url-pattern>/cometedgwt.auction.App/streamingServlet</url-pattern>
+		<url-pattern>/appcometgwt/streamingService</url-pattern>
 	</servlet-mapping>
 
 
