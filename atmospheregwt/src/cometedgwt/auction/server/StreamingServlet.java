@@ -85,6 +85,8 @@ public class StreamingServlet extends RemoteServiceServlet {
 	@Override
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 		response.setContentType("text/html;charset=ISO-8859-1");
+		
+		response.setHeader("Transfer-Encoding", "chunked");
 
 		AtmosphereResource e = (AtmosphereResource) request.getAttribute(ReflectorServletProcessor.ATMOSPHERE_RESOURCE);
 

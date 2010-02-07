@@ -38,6 +38,7 @@
 package cometedgwt.auction.client;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -46,6 +47,10 @@ import java.util.Map.Entry;
 
 import com.google.gwt.core.client.EntryPoint;
 import com.google.gwt.core.client.GWT;
+import com.google.gwt.event.dom.client.ClickEvent;
+import com.google.gwt.event.dom.client.ClickHandler;
+import com.google.gwt.event.dom.client.KeyUpEvent;
+import com.google.gwt.event.dom.client.KeyUpHandler;
 import com.google.gwt.json.client.JSONArray;
 import com.google.gwt.json.client.JSONException;
 import com.google.gwt.json.client.JSONNumber;
@@ -59,51 +64,123 @@ import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.rpc.ServiceDefTarget;
 import com.google.gwt.user.client.ui.Button;
-import com.google.gwt.user.client.ui.ClickListener;
 import com.google.gwt.user.client.ui.Grid;
-import com.google.gwt.user.client.ui.KeyboardListener;
 import com.google.gwt.user.client.ui.Label;
 import com.google.gwt.user.client.ui.RootPanel;
 import com.google.gwt.user.client.ui.TextArea;
 import com.google.gwt.user.client.ui.TextBox;
-import com.google.gwt.user.client.ui.Widget;
 import cometedgwt.auction.entity.AuctionItem;
 
 /**
  * Entry point classes define <code>onModuleLoad()</code>.
  */
 public class App implements EntryPoint {
-	
+
 	private final String streamingServlet = GWT.getModuleBaseURL() + "streamingServlet";
 	private final String streamingService = GWT.getModuleBaseURL() + "streamingService";
-	
-	
 
 	public static final String TOPIC = "bids";
-	private Map mapOfItemPrices = new HashMap();
-	private Map mapOfNumberOfBids = new HashMap();
+	private Map<Object, Label> mapOfItemPrices = new HashMap<Object, Label>();
+	private Map<Object, Label> mapOfNumberOfBids = new HashMap<Object, Label>();
 
 	private int watchDogTimerTime = 100000;
-	Map callbacks = new HashMap();
+	Map<Object, AsyncCallback> callbacks = new HashMap<Object, AsyncCallback>();
 	private boolean keepAlive = false;
 	private final StreamingServiceAsync service = (StreamingServiceAsync) GWT.create(StreamingService.class);
 	private final Map waitingSubscriber = new HashMap();
-	private final static AsyncCallback voidCallback = new AsyncCallback() {
+
+	public void onModuleLoad() {
+
+		List itens = getAuctionItens();
+		Grid table = new Grid(itens.size() + 1, 6);
+		table.setStylePrimaryName("corpo");
+
+		table.setText(0, 0, "Item Name");
+		table.setText(0, 1, "# of bids");
+		table.setText(0, 2, "Price");
+		table.setText(0, 3, "My bid");
+
+		for (int i = 0; i < itens.size(); i++) {
+
+			final AuctionItem item = (AuctionItem) itens.get(i);
+
+			final int itemId = item.getId();
+			final Label labelNumberOfBids = new Label(String.valueOf(item.getNumberOfBids()));
+			final Label labelPrice = new Label("$ " + String.valueOf(item.getPrice()));
+			final TextBox txtBoxMyBid = new TextBox();
+			final Button bidButton = new Button("Bid!");
+			final Label labelMessage = new Label("");
+
+			bidButton.setStylePrimaryName("principal");
+
+			// Save itemPrice Label to be used when new bids are processed.
+			mapOfItemPrices.put(new Integer(itemId), labelPrice);
+			// Save numberOfBids Label to be used when new bids are processed.
+			mapOfNumberOfBids.put(new Integer(itemId), labelNumberOfBids);
+
+			// Handle ENTER key
+			txtBoxMyBid.addKeyUpHandler(new KeyUpHandler() {
+
+				@Override
+				public void onKeyUp(KeyUpEvent event) {
+					if (event.getNativeKeyCode() == '\r') {
+						sendNewBid(item, txtBoxMyBid, labelMessage);
+					}
+
+				}
+			});
+
+			// Handle button click
+			bidButton.addClickHandler(new ClickHandler() {
+
+				@Override
+				public void onClick(ClickEvent event) {
+					sendNewBid(item, txtBoxMyBid, labelMessage);
+				}
+			});
+
+			table.setText(i + 1, 0, item.getName());
+			table.setWidget(i + 1, 1, labelNumberOfBids);
+			table.setWidget(i + 1, 2, labelPrice);
+			table.setWidget(i + 1, 3, txtBoxMyBid);
+			table.setWidget(i + 1, 4, bidButton);
+			table.setWidget(i + 1, 5, labelMessage);
+
+		}
+
+		RootPanel.get("slot1").add(table);
+
+		callbacks.put("keepAliveInternal", internalKeepAliveCallback);
+		callbacks.put("restartStreamingInternal", restartStreamingCallback);
+
+		((ServiceDefTarget) service).setServiceEntryPoint(streamingService);
+
+		setUpNativeCode(this);
+
+		restartStreamingFromIFrame();
+
+		createWatchDogTimer();
+
+		subScribeToEvent(TOPIC, new BidCallback());
+
+	}
+
+	private final static AsyncCallback<Void> voidCallback = new AsyncCallback<Void>() {
 
 		public void onFailure(Throwable caught) {
 		}
 
-		public void onSuccess(Object result) {
+		public void onSuccess(Void result) {
 		}
 	};
-	private final AsyncCallback restartStreamingCallback = new AsyncCallback() {
+	private final AsyncCallback<String> restartStreamingCallback = new AsyncCallback<String>() {
 
 		public void onFailure(Throwable caught) {
 		}
 
-		public void onSuccess(Object result) {
+		public void onSuccess(String result) {
 			restartStreamingFromIFrame();
-			callback("restartStreaming", (String) result);
+			callback("restartStreaming", result);
 		}
 	};
 	/**
@@ -112,16 +189,16 @@ public class App implements EntryPoint {
 	 * client callback (maybe the client has to do something with the heartbeat
 	 * itself).
 	 */
-	private final AsyncCallback internalKeepAliveCallback = new AsyncCallback() {
+	private final AsyncCallback<String> internalKeepAliveCallback = new AsyncCallback<String>() {
 
 		public void onFailure(Throwable caught) {
 		}
 
-		public void onSuccess(Object result) {
+		public void onSuccess(String result) {
 
 			alert("keepAlive");
 			keepAlive = true;
-			watchDogTimerTime = 10 * Integer.parseInt(result.toString());
+			watchDogTimerTime = 10 * Integer.parseInt(result);
 
 			for (Iterator iter = waitingSubscriber.entrySet().iterator(); iter.hasNext();) {
 				Entry callback = (Entry) iter.next();
@@ -244,33 +321,14 @@ public class App implements EntryPoint {
 		DOM.setAttribute(iframe, "src", streamingServlet);
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.gwtcomet.client.StreamingService#sendMessage(java.lang.String,
-	 * java.lang.String)
-	 */
 	public void sendMessage(String topicName, String data) {
 		service.sendMessage(topicName, data, voidCallback);
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see org.gwtcomet.client.StreamingService#sendMessage(java.lang.String,
-	 * com.google.gwt.sample.json.client.JSONValue)
-	 */
 	public void sendMessage(String topicName, JSONValue object) {
 		sendMessage(topicName, "$JSONSTART$" + object.toString() + "$JSONEND$");
 	}
 
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * org.gwtcomet.client.StreamingService#subScribeToEvent(java.lang.String,
-	 * com.google.gwt.user.client.rpc.AsyncCallback)
-	 */
 	public void subScribeToEvent(String topicName, AsyncCallback callback) {
 		if (keepAlive) {
 			alert("Streaming is alive, subscribing to '" + topicName + "' with callback " + callback);
@@ -291,16 +349,14 @@ public class App implements EntryPoint {
 		if (GWT.isScript()) {
 			RootPanel debugDiv = RootPanel.get("debug");
 			if (debugDiv != null) {
-				// if(debugDiv.getWidgetIndex(textArea)==-1)
-				// {
-				// textArea.setVisibleLines(30);
-				// textArea.setWidth("100%");
-				// textArea.setText("");
-				// debugDiv.add(textArea);
-				// }
-				//				
-				// textArea.setText(textArea.getText()+"\n"+new
-				// Date()+"("+System.currentTimeMillis()+"):"+message);
+				if (debugDiv.getWidgetIndex(textArea) == -1) {
+					textArea.setVisibleLines(30);
+					textArea.setWidth("100%");
+					textArea.setText("");
+					debugDiv.add(textArea);
+				}
+
+				textArea.setText(textArea.getText() + "\n" + new Date() + "(" + System.currentTimeMillis() + "):" + message);
 			}
 		} else {
 			GWT.log(message, null);
@@ -333,84 +389,6 @@ public class App implements EntryPoint {
 	/**
 	 * This is the entry point method.
 	 */
-	public void onModuleLoad() {
-
-		List itens = getAuctionItens();
-		Grid table = new Grid(itens.size() + 1, 6);
-		table.setStylePrimaryName("corpo");
-
-		table.setText(0, 0, "Item Name");
-		table.setText(0, 1, "# of bids");
-		table.setText(0, 2, "Price");
-		table.setText(0, 3, "My bid");
-
-		for (int i = 0; i < itens.size(); i++) {
-
-			final AuctionItem item = (AuctionItem) itens.get(i);
-
-			final int itemId = item.getId();
-			final Label labelNumberOfBids = new Label(String.valueOf(item.getNumberOfBids()));
-			final Label labelPrice = new Label("$ " + String.valueOf(item.getPrice()));
-			final TextBox txtBoxMyBid = new TextBox();
-			final Button bidButton = new Button("Bid!");
-			final Label labelMessage = new Label("");
-
-			bidButton.setStylePrimaryName("principal");
-
-			// Save itemPrice Label to be used when new bids are processed.
-			mapOfItemPrices.put(new Integer(itemId), labelPrice);
-			// Save numberOfBids Label to be used when new bids are processed.
-			mapOfNumberOfBids.put(new Integer(itemId), labelNumberOfBids);
-
-			// Handle ENTER key
-			txtBoxMyBid.addKeyboardListener(new KeyboardListener() {
-
-				public void onKeyUp(Widget sender, char keyCode, int modifiers) {
-					if (keyCode == '\r') {
-						sendNewBid(item, txtBoxMyBid, labelMessage);
-					}
-				}
-
-				public void onKeyDown(Widget sender, char keyCode, int modifiers) {
-				}
-
-				public void onKeyPress(Widget sender, char keyCode, int modifiers) {
-				}
-			});
-
-			// Handle button click
-			bidButton.addClickListener(new ClickListener() {
-
-				public void onClick(Widget sender) {
-					sendNewBid(item, txtBoxMyBid, labelMessage);
-				}
-			});
-
-			table.setText(i + 1, 0, item.getName());
-			table.setWidget(i + 1, 1, labelNumberOfBids);
-			table.setWidget(i + 1, 2, labelPrice);
-			table.setWidget(i + 1, 3, txtBoxMyBid);
-			table.setWidget(i + 1, 4, bidButton);
-			table.setWidget(i + 1, 5, labelMessage);
-
-		}
-
-		RootPanel.get("slot1").add(table);
-
-		callbacks.put("keepAliveInternal", internalKeepAliveCallback);
-		callbacks.put("restartStreamingInternal", restartStreamingCallback);
-		
-		((ServiceDefTarget) service).setServiceEntryPoint(streamingService);
-
-		setUpNativeCode(this);
-
-		restartStreamingFromIFrame();
-
-		createWatchDogTimer();
-
-		subScribeToEvent(TOPIC, new BidCallback());
-
-	}
 
 	private List getAuctionItens() {
 
