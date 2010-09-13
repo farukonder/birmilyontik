@@ -5,7 +5,7 @@
 	<artifactId>tr.gov.e-hizmet.web</artifactId>
 	<version>1.0</version>
 	<packaging>war</packaging>
-
+	
 	<properties>
 		<spring.version>3.0.3.RELEASE</spring.version>
 		<jstl.version>1.1.2</jstl.version>
@@ -165,7 +165,8 @@
 		</dependency>
 	-->
 	</dependencies>
-	<build>
+	<build> 
+	    <finalName>e-hizmet</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
