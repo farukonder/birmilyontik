@@ -1,9 +1,0 @@
-Manifest-Version: 1.0
-Archiver-Version: Plexus Archiver
-Created-By: Apache Maven
-Built-By: hudson
-Build-Jdk: 1.6.0_13
-Hudson-Build-Number: 3109
-Hudson-Project: Atmosphere
-Hudson-Version: 1.344-SNAPSHOT (private-02/03/2010 06:04-hudson)
-
