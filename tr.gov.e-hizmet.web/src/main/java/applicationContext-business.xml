@@ -29,7 +29,7 @@
     
     
     
-	<context:component-scan base-package="org.primefaces.examples.moviecollector" />
+	<context:component-scan base-package="tr.gov.e.hizmet" />
 	
 	<tx:annotation-driven transaction-manager="txManager"/>
 	

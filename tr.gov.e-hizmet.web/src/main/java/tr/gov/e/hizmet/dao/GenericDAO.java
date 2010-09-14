@@ -1,4 +1,4 @@
-package org.primefaces.examples.moviecollector.dao;
+package tr.gov.e.hizmet.dao;
 
 import java.io.Serializable;
 import java.util.List;

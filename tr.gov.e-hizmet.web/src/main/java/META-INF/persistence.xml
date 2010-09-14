@@ -5,7 +5,7 @@
 	version="1.0">
 
 	<persistence-unit name="prime-moviecollector" transaction-type="RESOURCE_LOCAL">
-		  <class>org.primefaces.examples.moviecollector.domain.Movie</class>
+		  <class>tr.gov.e.hizmet.model.Person</class>
 	</persistence-unit>
 
 </persistence>
